@@ -9,4 +9,4 @@ RUN python3 -m pip install --user virtualenv
 #RUN 'export PYTHONPATH=/home/linuxbrew/.linuxbrew/lib/python2.7/site-packages:$PYTHONPATH' >> /home/linuxbrew/.bashrc
 #RUN 'export PYTHONPATH=/home/linuxbrew/.linuxbrew/lib/python3.5/site-packages:$PYTHONPATH' >> /home/linuxbrew/.bashrc
 
-RUN brew install gromacs
+RUN brew install amber 
