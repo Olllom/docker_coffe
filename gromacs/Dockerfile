@@ -1,6 +1,8 @@
-FROM linuxbrew/linuxbrew
+FROM linuxbrew/linuxbrew:1.4.3
 
 #RUN sudo apt-get install -y libssl-dev openssl bzip2
+
+RUN sudo apt-get update
 RUN sudo apt-get install -y python3 python3-pip
 RUN python3 -m pip install --user virtualenv
 
