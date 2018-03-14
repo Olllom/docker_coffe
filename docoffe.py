@@ -1,0 +1,174 @@
+#! /usr/bin/env python
+# -*- coding: utf-8 -*-
+
+"""
+Simulates the continuous integration framework on a local machine.
+"""
+
+from __future__ import absolute_import, division, print_function
+
+import subprocess as sp
+import os
+import sys
+import docker
+import click
+import tarfile as tf
+from io import BytesIO
+
+
+IMAGES = {
+    "no": "adreeve/python-numpy",
+    "chm": "olllom/coffe-charmm",
+    "amb": "olllom/numpy-amb",
+    "gmx": "olllom/numpy-gromacs", # for the moment we take the old numpy-gromacs image,
+                                   # since tox is not found in the updated numpy-gmx and I do not know
+                                   # which location it is installed to
+}
+
+
+def check_docker():
+    """Check if docker is installed. Exit program with error message otherwise.
+    """
+    which = sp.Popen("which docker".split(), stdout=sp.PIPE, stderr=sp.PIPE)
+    out, _ = which.communicate()
+    if len(out) == 0:
+        print("Fatal error: Docker is not installed on your machine. Exiting.")
+        sys.exit(1)
+
+
+class InParentDir(object):
+    """
+    A helper class to execute the tar-ing in the parent directory
+    """
+    def __init__(self, path):
+        self.orig = os.path.abspath(os.getcwd())
+        if os.path.isfile(path):
+            self.work_dir = os.path.dirname(path)
+        else:
+            self.work_dir = os.path.normpath(os.path.join(path, os.path.pardir))
+        os.chdir(self.work_dir)
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *args, **kwargs):
+        os.chdir(self.orig)
+
+
+def autodetect_coffe():
+    try:
+        import coffe
+        coffedir = os.path.normpath(os.path.join(os.path.dirname(coffe.__file__), os.path.pardir))
+        print("Found coffe at {}".format(coffedir))
+        return coffedir
+    except:
+        print ("Did not find coffe. Exiting.")
+        sys.exit(1)
+
+
+def extract_yml_cmds(coffedir, container_name):
+    yml = os.path.join(coffedir, ".gitlab-ci.yml")
+    assert os.path.isfile(yml)
+    result = []
+    # make sure all images are defined in yml file
+    for k in IMAGES:
+        with open(yml, "r") as f:
+            assert any(IMAGES[k] in l for l in f), "Error: Image {} not found in .gitlab-ci.yml".format(IMAGES[k])
+    # extract relevant lines of script
+    with open(yml, "r") as f:
+        right_section = False
+        in_right_script = False
+        for l in f:
+            line = l.strip()
+            if right_section:
+                if in_right_script and line.startswith("-"):
+                    line = line[1:].strip()
+                    result += [line]
+                    continue
+                elif line.startswith("script"):
+                    in_right_script = True
+                    continue
+                else:
+                    return result
+            elif "image" in line and container_name in line:
+                right_section = True
+                continue
+            else:
+                continue
+
+
+class InteractiveDockerContainer(object):
+    """A wrapper to the docker.Container class
+    """
+    def __init__(self, container_name):
+        assert container_name in IMAGES
+        self.image = IMAGES[container_name]
+        self.name = container_name
+        print("Create container {}".format(self.name))
+        client = docker.from_env()
+        self.container = client.containers.run(self.image, "/bin/bash", detach=True, tty=True)
+        self.container.rename(self.name)
+
+    def __call__(self, cmd, workdir=None, environment=[]):
+        """Run a command in workdir, print output and return the result (returncode, stdout).
+        If the command sets an environment variable, it is appended to the environment list"""
+        print("    >> {}     # (env variables: {})\n".format(cmd, environment))
+        if cmd.strip().startswith("export"):
+            environment += [cmd.replace("export","").strip()]
+        else:
+            result = self.container.exec_run(cmd, workdir=workdir, environment=environment)
+            print(result.output.decode("utf8"))
+            return result
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        print("Delete container {}".format(self.name))
+        self.container.stop()
+        self.container.remove()
+
+    def cp_out(self, path1, path2):
+        raise NotImplementedError()
+
+    def cp_in(self, path1, path2):
+        with InParentDir(path1) as pardir:
+            writetar = tf.open(name='/tmp/docoffe_tar.tar', mode='w|')
+            writetar.add(os.path.relpath(path1, pardir.work_dir))
+            writetar.close()
+        with open('/tmp/docoffe_tar.tar', 'rb') as f:
+            self.container.put_archive(path=path2, data=BytesIO(f.read()))
+
+
+@click.command()
+@click.argument("program", type=str)
+def main(program):
+    """
+    Local docker runner for coffe's CI framework.
+    PROGRAM denotes the simulation program that should be used for testing
+    and has to be one of the following: (no, amb, gmx, chm).
+    """
+    check_docker()
+    coffedir = autodetect_coffe()
+    assert program in IMAGES
+    yml_commands = extract_yml_cmds(coffedir, IMAGES[program])
+    environment = []
+    with InteractiveDockerContainer(program) as dk:
+        dk("echo Hello")
+        # copy coffe directory into container
+        dk.cp_in(coffedir, "/tmp")
+        # remove cache files from coffe directory (piping does not work here)
+        rm_files = dk('find . -name "*.pyc"',
+                      workdir="/tmp/coffe", environment=environment
+                      ).output.decode("utf8").split()
+        rm_files += dk('find . -name "__pycache__"',
+                       workdir="/tmp/coffe", environment=environment
+                       ).output.decode("utf8").split()
+        dk('rm -r {}'.format(" ".join(rm_files)), workdir="/tmp/coffe", environment=environment)
+        # run commands
+        for cmd in yml_commands:
+            dk(cmd, workdir="/tmp/coffe")
+
+
+if __name__ == "__main__":
+    main()
