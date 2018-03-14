@@ -17,12 +17,10 @@ from io import BytesIO
 
 
 IMAGES = {
-    "no": "adreeve/python-numpy",
-    "chm": "olllom/coffe-charmm",
-    "amb": "olllom/numpy-amb",
-    "gmx": "olllom/numpy-gromacs", # for the moment we take the old numpy-gromacs image,
-                                   # since tox is not found in the updated numpy-gmx and I do not know
-                                   # which location it is installed to
+    "no": "olllom/coffeci-no",
+    "chm": "olllom/coffeci-chm",
+    "amb": "olllom/coffeci-amb",
+    "gmx": "olllom/coffeci-gmx",
 }
 
 
