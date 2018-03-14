@@ -98,7 +98,7 @@ def extract_yml_cmds(coffedir, container_name):
 
 
 class InteractiveDockerContainer(object):
-    """A wrapper to the docker.Container class
+    """A customized wrapper to the docker.Container class
     """
     def __init__(self, container_name):
         assert container_name in IMAGES
@@ -115,6 +115,7 @@ class InteractiveDockerContainer(object):
         print("    >> {}     # (env variables: {})\n".format(cmd, environment))
         if cmd.strip().startswith("export"):
             environment += [cmd.replace("export","").strip()]
+            return 0, ""
         else:
             result = self.container.exec_run(cmd, workdir=workdir, environment=environment)
             print(result.output.decode("utf8"))
@@ -140,23 +141,20 @@ class InteractiveDockerContainer(object):
             self.container.put_archive(path=path2, data=BytesIO(f.read()))
 
 
-@click.command()
-@click.argument("program", type=str)
-def main(program):
-    """
-    Local docker runner for coffe's CI framework.
-    PROGRAM denotes the simulation program that should be used for testing
-    and has to be one of the following: (no, amb, gmx, chm).
-    """
+def run_one_container(program):
     check_docker()
     coffedir = autodetect_coffe()
     assert program in IMAGES
     yml_commands = extract_yml_cmds(coffedir, IMAGES[program])
     environment = []
     with InteractiveDockerContainer(program) as dk:
-        dk("echo Hello")
         # copy coffe directory into container
         dk.cp_in(coffedir, "/tmp")
+        # own all files
+        whoami = dk('whoami',
+                    workdir="/tmp/coffe", environment=environment
+                    ).output.decode("utf8").strip()
+        dk("sudo chown -R {} .".format(whoami), workdir="/tmp/coffe", environment=environment)
         # remove cache files from coffe directory (piping does not work here)
         rm_files = dk('find . -name "*.pyc"',
                       workdir="/tmp/coffe", environment=environment
@@ -166,8 +164,54 @@ def main(program):
                        ).output.decode("utf8").split()
         dk('rm -r {}'.format(" ".join(rm_files)), workdir="/tmp/coffe", environment=environment)
         # run commands
+        exit_code = 0
         for cmd in yml_commands:
-            dk(cmd, workdir="/tmp/coffe")
+            exit_code, _ = dk(cmd, workdir="/tmp/coffe")
+        return exit_code
+
+
+class Rainbow:
+    PURPLE = '\033[95m'
+    CYAN = '\033[96m'
+    DARKCYAN = '\033[36m'
+    BLUE = '\033[94m'
+    GREEN = '\033[92m'
+    YELLOW = '\033[93m'
+    RED = '\033[91m'
+    BOLD = '\033[1m'
+    UNDERLINE = '\033[4m'
+    END = '\033[0m'
+    @classmethod
+    def print(cls, msg, *args):
+        res = msg
+        for a in args:
+            res = a + res + cls.END
+        print(res)
+
+
+@click.command()
+@click.option("-p","--program", type=str,
+              help="denotes the simulation program (and respective docker container)"
+                   "that should be used for testing "
+                   "and has to be one of the following: (no, amb, gmx, chm)."
+                   "If the program is not specified, run all."
+              )
+def main(program):
+    """
+    Local docker runner for coffe's CI framework.
+    """
+    if program is not None:
+        run_one_container(program)
+    else:
+        exit_codes = {k: None for k in IMAGES}
+        for k in IMAGES:
+            exit_codes[k] = run_one_container(k)
+
+        Rainbow.print("----- SUMMARY -----", Rainbow.BOLD)
+        for k in IMAGES:
+            result = "OK" if exit_codes[k] == 0 else "ERROR"
+            color = Rainbow.GREEN if exit_codes[k] == 0 else Rainbow.RED
+            Rainbow.print(" {:<6} ... {:<6} ".format(k, result), Rainbow.BOLD, color)
 
 
 if __name__ == "__main__":
