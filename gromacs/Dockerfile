@@ -4,7 +4,7 @@ FROM ubuntu:16.04
 
 RUN apt-get update
 RUN apt-get install -y cmake build-essential wget python3 python-dev python3-pip python-pip
-RUN apt-get install -y openbabel
+RUN apt-get install -y openbabel pymol
 
 RUN wget ftp://ftp.gromacs.org/pub/gromacs/gromacs-2016.5.tar.gz
 RUN tar xfz gromacs-2016.5.tar.gz

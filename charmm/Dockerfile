@@ -2,7 +2,7 @@ FROM jchodera/charmm-lite:c40b1
 
 RUN sudo apt-get update
 RUN sudo apt-get install -y python-pip python3-pip
-RUN sudo apt-get install -y openbabel
+RUN sudo apt-get install -y openbabel pymol
 RUN sudo apt-get remove -y python3
 
 # INSTALL PYTHON 3.5
