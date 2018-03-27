@@ -16,3 +16,5 @@ RUN make
 RUN make check
 RUN make install
 RUN echo "source /usr/local/gromacs/bin/GMXRC" > $HOME/.bashrc
+
+RUN sed -i "s,python2.7,/usr/bin/python2.7,g" /usr/bin/pymol

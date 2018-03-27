@@ -17,3 +17,5 @@ RUN sudo make install
 
 
 RUN echo "export PATH=/charmm/c40b1_gnu/exec/gnu:$PATH" > /root/.bashrc
+
+RUN sed -i "s,python2.7,/usr/bin/python2.7,g" /usr/bin/pymol
