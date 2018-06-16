@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 
 """
-Simulates the continuous integration framework on a local machine.
+Simulates the continuous integration framework for coffe on a local machine.
 """
 
 from __future__ import absolute_import, division, print_function
@@ -13,8 +13,9 @@ import sys
 import docker
 import click
 import tarfile as tf
+import six
 from io import BytesIO
-
+from six.moves import input
 
 IMAGES = {
     "no": "olllom/coffeci-no",
@@ -65,6 +66,9 @@ def autodetect_coffe():
 
 
 def extract_yml_cmds(coffedir, container_name):
+    """
+    Extract image-specific commands from .gitlab-ci.yml
+    """
     yml = os.path.join(coffedir, ".gitlab-ci.yml")
     assert os.path.isfile(yml)
     result = []
@@ -120,6 +124,7 @@ class InteractiveDockerContainer(object):
             return result
 
     def __enter__(self):
+        """ with block """
         return self
 
     def __exit__(self, exc_type, exc_val, exc_tb):
@@ -131,6 +136,7 @@ class InteractiveDockerContainer(object):
         raise NotImplementedError()
 
     def cp_in(self, path1, path2):
+        """ copy file into docker container """
         with InParentDir(path1) as pardir:
             writetar = tf.open(name='/tmp/docoffe_tar.tar', mode='w|')
             writetar.add(os.path.relpath(path1, pardir.work_dir))
@@ -139,7 +145,8 @@ class InteractiveDockerContainer(object):
             self.container.put_archive(path=path2, data=BytesIO(f.read()))
 
 
-def run_one_container(program):
+def run_one_container(program, interactive):
+    """ run coffe tests in a docker container """
     check_docker()
     coffedir = autodetect_coffe()
     assert program in IMAGES
@@ -165,6 +172,12 @@ def run_one_container(program):
         exit_code = 0
         for cmd in yml_commands:
             exit_code, _ = dk(cmd, workdir="/tmp/coffe")
+        if interactive:
+            while True:
+                cmd = input("Next Command: ")
+                if cmd.strip() == "":
+                    break
+                exit_code, _ = dk(cmd, workdir="/tmp/coffe")
         return exit_code
 
 
@@ -194,12 +207,15 @@ class Rainbow:
                    "and has to be one of the following: (no, amb, gmx, chm)."
                    "If the program is not specified, run all."
               )
-def main(program):
+@click.option("-i", "--interactive", is_flag=True, default=False,
+              help="Interactive mode. Works only with -p option."
+              )
+def main(program, interactive):
     """
     Local docker runner for coffe's CI framework.
     """
     if program is not None:
-        run_one_container(program)
+        run_one_container(program, interactive)
     else:
         exit_codes = {k: None for k in IMAGES}
         for k in IMAGES:
