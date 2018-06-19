@@ -15,6 +15,6 @@ RUN cmake .. -DGMX_BUILD_OWN_FFTW=ON -DREGRESSIONTEST_DOWNLOAD=ON -DGMX_USE_RDTS
 RUN make
 RUN make check
 RUN make install
-RUN echo "source /usr/local/gromacs/bin/GMXRC" >> /etc/bash.bashrc
+RUN echo "source /usr/local/gromacs/bin/GMXRC" >> /root/.bashrc
 
 RUN sed -i "s,python2.7,/usr/bin/python2.7,g" /usr/bin/pymol

@@ -208,13 +208,25 @@ class Rainbow:
                    "If the program is not specified, run all."
               )
 @click.option("-i", "--interactive", is_flag=True, default=False,
-              help="Interactive mode. Works only with -p option."
+              help="Interactive mode. Works only with -p or -l option."
               )
-def main(program, interactive):
+@click.option("-l", "--local", type=str,
+              help="ID of the local container to be run. "
+                   "From a given Dockerfile, you have to first build the "
+                   "container using "
+                   "'docker build <directory containing the dockerfile>'. "
+                   "Does not work, yet."
+              )
+def main(program, interactive, local):
     """
     Local docker runner for coffe's CI framework.
     """
-    if program is not None:
+    if local is not None:
+        assert program is not None
+        raise NotImplementedError()
+        IMAGES["local"] = local
+        run_one_container("local", interactive)
+    elif program is not None:
         run_one_container(program, interactive)
     else:
         exit_codes = {k: None for k in IMAGES}
